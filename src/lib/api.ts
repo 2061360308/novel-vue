@@ -1,0 +1,43 @@
+const API_KEY = 'your-shared-api-key'
+
+async function request(path: string, opts: RequestInit = {}): Promise<any> {
+  const res = await fetch(path, {
+    ...opts,
+    headers: {
+      Authorization: `Bearer ${API_KEY}`,
+      'Content-Type': 'application/json',
+      ...opts.headers as Record<string, string>,
+    },
+  })
+  const data = await res.json().catch(() => null)
+  if (!res.ok) throw new Error((data && data.message) || `HTTP ${res.status}`)
+  return data
+}
+
+export function getQueue()                      { return request('/api/queue') }
+export function deleteFromQueue(key: string)     { return request(`/api/queue/${encodeURIComponent(key)}`, { method: 'DELETE' }) }
+export function checkNovel(hash: string)         { return request(`/api/novel/${hash}`) }
+export function triggerAction()                  { return request('/api/trigger', { method: 'POST' }) }
+
+export function requestPresign(hash: string, size: number, title?: string) {
+  return request('/api/upload/presign', { method: 'POST', body: JSON.stringify({ hash, size, title }) })
+}
+
+export function confirmUpload(hash: string, title?: string) {
+  return request('/api/upload/complete', { method: 'POST', body: JSON.stringify({ hash, title }) })
+}
+
+export function uploadToR2(url: string, blob: Blob, onProgress?: (p: number) => void): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open('PUT', url)
+    xhr.upload.onprogress = e => { if (e.lengthComputable && onProgress) onProgress(e.loaded / e.total) }
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) resolve()
+      else reject(new Error(`上传失败: HTTP ${xhr.status}`))
+    }
+    xhr.onerror = () => reject(new Error('网络错误'))
+    xhr.ontimeout = () => reject(new Error('上传超时'))
+    xhr.send(blob)
+  })
+}
