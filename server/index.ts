@@ -93,10 +93,10 @@ async function handleComplete(env: Env, request: Request) {
   if (await isActionRunning(env)) {
     return json({ status: 'queued', hash, message: '文件已接收，将在下一轮被处理' });
   }
-  const { GITHUB_OWNER, GITHUB_REPO, GITHUB_TOKEN } = env;
+  const { CONTENT_OWNER, CONTENT_REPO, GITHUB_OWNER, GITHUB_REPO, GITHUB_TOKEN } = env;
   let triggered = false;
-  if (GITHUB_OWNER && GITHUB_REPO && GITHUB_TOKEN) {
-    triggered = await triggerWorkflow(GITHUB_OWNER, GITHUB_REPO, hash, GITHUB_TOKEN);
+  if (CONTENT_OWNER && CONTENT_REPO && GITHUB_TOKEN) {
+    triggered = await triggerWorkflow(CONTENT_OWNER, CONTENT_REPO, hash, GITHUB_TOKEN, GITHUB_OWNER, GITHUB_REPO);
   }
   return json({ status: triggered ? 'processing' : 'queued', hash, message: triggered ? '处理已开始' : '文件已接收，等待下一轮 Cron 处理' });
 }
@@ -105,12 +105,12 @@ async function handleTrigger(env: Env, request: Request) {
   if (!validateApiKey(request, env)) return err('UNAUTHORIZED', null, 401);
   if (await isActionRunning(env)) return err('ACTION_RUNNING', null, 503);
 
-  const { GITHUB_OWNER, GITHUB_REPO, GITHUB_TOKEN } = env;
-  if (!GITHUB_OWNER || !GITHUB_REPO || !GITHUB_TOKEN) {
+  const { CONTENT_OWNER, CONTENT_REPO, GITHUB_OWNER, GITHUB_REPO, GITHUB_TOKEN } = env;
+  if (!CONTENT_OWNER || !CONTENT_REPO || !GITHUB_TOKEN) {
     return err('GITHUB_ERROR', null, 500);
   }
 
-  const ok = await triggerWorkflow(GITHUB_OWNER, GITHUB_REPO, '', GITHUB_TOKEN);
+  const ok = await triggerWorkflow(CONTENT_OWNER, CONTENT_REPO, '', GITHUB_TOKEN, GITHUB_OWNER, GITHUB_REPO);
   return json({ triggered: ok });
 }
 

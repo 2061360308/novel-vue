@@ -8,9 +8,9 @@ const R2_ENDPOINT     = required('R2_ENDPOINT')
 const R2_KEY_ID       = required('R2_ACCESS_KEY_ID')
 const R2_SECRET       = required('R2_SECRET_ACCESS_KEY')
 const R2_BUCKET       = required('R2_BUCKET_NAME')
-const GITHUB_TOKEN    = required('GH_PAT')
-const CONTENT_OWNER   = required('CONTENT_OWNER')
-const CONTENT_REPO    = required('CONTENT_REPO')
+const GITHUB_TOKEN    = required('GITHUB_TOKEN')
+const GH_REPO         = process.env.GITHUB_REPOSITORY || ''
+const [GH_OWNER = '', GH_NAME = ''] = GH_REPO.split('/')
 const INPUT_HASH      = process.env.INPUT_HASH || ''
 const UPLOAD_PREFIX   = 'uploads/'
 const INDEX_PATH      = 'index.json'
@@ -61,7 +61,7 @@ async function downloadZip(key) {
 
 async function releaseExists(tag) {
   try {
-    await octo.rest.repos.getReleaseByTag({ owner: CONTENT_OWNER, repo: CONTENT_REPO, tag })
+    await octo.rest.repos.getReleaseByTag({ owner: GH_OWNER, repo: GH_NAME, tag })
     return true
   } catch (e) {
     if (e.status === 404) return false
@@ -71,7 +71,7 @@ async function releaseExists(tag) {
 
 async function createRelease(tag, name, body) {
   const { data } = await octo.rest.repos.createRelease({
-    owner: CONTENT_OWNER, repo: CONTENT_REPO, tag_name: tag, name, body,
+    owner: GH_OWNER, repo: GH_NAME, tag_name: tag, name, body,
     draft: false, prerelease: false,
   })
   return data
@@ -82,11 +82,22 @@ async function uploadAsset(uploadUrl, assetName, data, contentType) {
   await octo.request({ method: 'POST', url, headers: { 'content-type': contentType }, data })
 }
 
+async function uploadAssets(uploadUrl, assets) {
+  const CONCURRENCY = 8
+  for (let i = 0; i < assets.length; i += CONCURRENCY) {
+    await Promise.all(assets.slice(i, i + CONCURRENCY).map(a =>
+      uploadAsset(uploadUrl, a.name, a.data, a.type).catch(e => {
+        console.warn(`  ⚠ ${a.name}: ${e.message}`)
+      })
+    ))
+  }
+}
+
 /* ── 索引文件 ───────────────────────────────── */
 
 async function readIndex() {
   try {
-    const { data } = await octo.rest.repos.getContent({ owner: CONTENT_OWNER, repo: CONTENT_REPO, path: INDEX_PATH })
+    const { data } = await octo.rest.repos.getContent({ owner: GH_OWNER, repo: GH_NAME, path: INDEX_PATH })
     const content = Buffer.from(data.content, 'base64').toString('utf-8')
     return { books: JSON.parse(content).books, sha: data.sha }
   } catch (e) {
@@ -97,7 +108,7 @@ async function readIndex() {
 
 async function writeIndex(books, sha) {
   const content = Buffer.from(JSON.stringify({ books }, null, 2) + '\n', 'utf-8').toString('base64')
-  const params = { owner: CONTENT_OWNER, repo: CONTENT_REPO, path: INDEX_PATH, message: '📚 更新书籍索引', content }
+  const params = { owner: GH_OWNER, repo: GH_NAME, path: INDEX_PATH, message: '📚 更新书籍索引', content }
   if (sha) params.sha = sha
   await octo.rest.repos.createOrUpdateFileContents(params)
 }
@@ -176,13 +187,19 @@ async function processZip(key) {
       count++
     }
 
+    const chapterAssets = []
     for (const e of entries) {
       const file = zip.file(`chapters/${e.chHash}.txt`) || zip.file(`chapters/${e.chHash}.md`)
       if (file) {
-        await uploadAsset(release.upload_url, `${e.k}.txt`, await file.async('nodebuffer'), 'text/plain; charset=utf-8')
-        count++
+        chapterAssets.push({
+          name: `${e.k}.txt`,
+          data: await file.async('nodebuffer'),
+          type: 'text/plain; charset=utf-8',
+        })
       }
     }
+    await uploadAssets(release.upload_url, chapterAssets)
+    count += chapterAssets.length
 
     console.log(`  ✅ ${tag} — ${count} 个资源 → ${release.html_url}`)
   }
