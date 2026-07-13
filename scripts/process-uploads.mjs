@@ -36,9 +36,8 @@ const HOSTNAME = new URL(R2_ENDPOINT).hostname
 /* ── R2 操作 ────────────────────────────────── */
 
 async function listUploads() {
-  const url = `https://${R2_BUCKET}.${HOSTNAME}/?list-type=2&prefix=${encodeURIComponent(UPLOAD_PREFIX)}`
-  const signed = await r2.sign(url, { method: 'GET' })
-  const res = await fetch(signed.url)
+  const url = `https://${HOSTNAME}/${R2_BUCKET}?list-type=2&prefix=${encodeURIComponent(UPLOAD_PREFIX)}`
+  const res = await r2.fetch(url, { method: 'GET' })
   if (!res.ok) throw new Error(`R2 list 失败: ${res.status}`)
   const xml = await res.text()
 
@@ -52,9 +51,8 @@ async function listUploads() {
 }
 
 async function downloadZip(key) {
-  const url = `https://${R2_BUCKET}.${HOSTNAME}/${key}`
-  const signed = await r2.sign(url, { method: 'GET' })
-  const res = await fetch(signed.url)
+  const url = `https://${HOSTNAME}/${R2_BUCKET}/${key}`
+  const res = await r2.fetch(url, { method: 'GET' })
   if (!res.ok) throw new Error(`下载 ${key} 失败: ${res.status}`)
   return Buffer.from(await res.arrayBuffer())
 }
