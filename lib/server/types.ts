@@ -1,5 +1,6 @@
 export interface Env {
   NOVEL_R2: R2Bucket;
+  ASSETS: Fetcher;
   API_KEY: string;
   GITHUB_TOKEN: string;
   GITHUB_OWNER: string;

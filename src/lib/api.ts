@@ -1,10 +1,23 @@
-const API_KEY = 'your-shared-api-key'
+const STORAGE_KEY = 'nov_api_key'
+
+function getKey(): string {
+  return localStorage.getItem(STORAGE_KEY) || ''
+}
+
+export function setApiKey(key: string) {
+  localStorage.setItem(STORAGE_KEY, key)
+}
+
+export function hasApiKey(): boolean {
+  return !!getKey()
+}
 
 async function request(path: string, opts: RequestInit = {}): Promise<any> {
+  const key = getKey()
   const res = await fetch(path, {
     ...opts,
     headers: {
-      Authorization: `Bearer ${API_KEY}`,
+      Authorization: `Bearer ${key}`,
       'Content-Type': 'application/json',
       ...opts.headers as Record<string, string>,
     },

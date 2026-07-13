@@ -1,42 +1,42 @@
-# novel-vue
+# legado-shelf
 
-This template should help get you started developing with Vue 3 in Vite.
+[Legado](https://github.com/gedoor/legado)（开源阅读）的云端书架。提供 Web 管理界面，可将本地 EPUB/TXT 上传至 GitHub Release 存储，通过定制书源随时在线阅读。
 
-## Recommended IDE Setup
+## 特性
 
-[VS Code](https://code.visualstudio.com/) + [Vue (Official)](https://marketplace.visualstudio.com/items?itemName=Vue.volar) (and disable Vetur).
+- **Web 管理** — 拖拽上传 EPUB/TXT，编辑元数据，封面自动转 JPEG
+- **GitHub 存储** — 书籍按章节分片存入 GitHub Release，自动生成索引
+- **Cloudflare 驱动** — Worker + R2 全栈部署，全球边缘加速，无需服务器
+- **API 接口** — 搜索、目录、章节内容、封面，可接入自定书源
 
-## Recommended Browser Setup
+## 一键部署
 
-- Chromium-based browsers (Chrome, Edge, Brave, etc.):
-  - [Vue.js devtools](https://chromewebstore.google.com/detail/vuejs-devtools/nhdogjmejiglipccpnnnanhbledajbpd)
-  - [Turn on Custom Object Formatter in Chrome DevTools](http://bit.ly/object-formatters)
-- Firefox:
-  - [Vue.js devtools](https://addons.mozilla.org/en-US/firefox/addon/vue-js-devtools/)
-  - [Turn on Custom Object Formatter in Firefox DevTools](https://fxdx.dev/firefox-devtools-custom-object-formatters/)
+部署教程见 [docs/deploy.md](docs/deploy.md)。
 
-## Type Support for `.vue` Imports in TS
+## 本地开发
 
-TypeScript cannot handle type information for `.vue` imports by default, so we replace the `tsc` CLI with `vue-tsc` for type checking. In editors, we need [Volar](https://marketplace.visualstudio.com/items?itemName=Vue.volar) to make the TypeScript language service aware of `.vue` types.
-
-## Customize configuration
-
-See [Vite Configuration Reference](https://vite.dev/config/).
-
-## Project Setup
-
-```sh
+```bash
+git clone https://github.com/你的用户名/legado-shelf.git
+cd legado-shelf
 npm install
-```
-
-### Compile and Hot-Reload for Development
-
-```sh
+cp .dev.vars.example .dev.vars   # 编辑填入配置
 npm run dev
 ```
 
-### Type-Check, Compile and Minify for Production
+浏览器打开 `http://localhost:5173`，输入 API Key。
 
-```sh
-npm run build
+## 架构
+
 ```
+前端 (Vue 3)  ──→  Cloudflare Worker  ──→  GitHub API
+                       │
+                  Cloudflare R2        GitHub Actions
+                  (上传暂存)            (Release 生成)
+```
+
+## 技术栈
+
+- Vue 3 + Vue Router + TypeScript
+- Cloudflare Workers + R2
+- GitHub Actions + Octokit
+- JSZip + aws4fetch

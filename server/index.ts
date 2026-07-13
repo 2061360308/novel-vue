@@ -1,14 +1,14 @@
 import { json, err } from './_utils';
-import { validateApiKey } from '../lib/server/auth';
+import { validateRequest } from '../lib/server/auth';
 import { isActionRunning } from '../lib/server/action';
 import { createR2Client, createPresignedUrl } from '../lib/server/presign';
 import { r2Key, fileExists, listFiles, deleteFile } from '../lib/server/r2';
-import { checkReleaseExists, listReleaseTags, triggerWorkflow } from '../lib/server/github';
+import { checkReleaseExists, listReleaseTags, triggerWorkflow, getPageContent, getReleaseAsset, downloadReleaseAsset } from '../lib/server/github';
 import { HASH_REGEX, UPLOAD_PREFIX, MAX_UPLOAD_SIZE, PRESIGN_EXPIRES } from '../lib/shared/constants';
 import type { Env } from '../lib/server/types';
 
 export default {
-  async fetch(request, env, ctx) {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext) {
     const u = new URL(request.url);
     const p = u.pathname;
     const m = request.method;
@@ -29,6 +29,12 @@ export default {
       if (p === '/api/upload/complete' && m === 'POST') {
         return handleComplete(env, request);
       }
+      if (p === '/api/books' && m === 'GET') {
+        return handleBooksList(env, request);
+      }
+      if (p.startsWith('/api/books/')) {
+        return handleBooksRoute(env, request, p, ctx);
+      }
       if (p.startsWith('/api/novel/')) {
         return handleNovelCheck(env, request, p);
       }
@@ -39,10 +45,10 @@ export default {
 
     return env.ASSETS.fetch(request);
   },
-} satisfies ExportedHandler<Env & { ASSETS: Fetcher }>;
+} satisfies ExportedHandler<Env>;
 
 async function handleQueueList(env: Env, request: Request) {
-  if (!validateApiKey(request, env)) return err('UNAUTHORIZED', null, 401);
+  if (!validateRequest(request, env)) return err('UNAUTHORIZED', null, 401);
   let running = false;
   try { running = await isActionRunning(env); } catch { /* */ }
   let files: { key: string; size: number; uploaded: string }[] = [];
@@ -51,7 +57,7 @@ async function handleQueueList(env: Env, request: Request) {
 }
 
 async function handleQueueDelete(env: Env, request: Request, path: string) {
-  if (!validateApiKey(request, env)) return err('UNAUTHORIZED', null, 401);
+  if (!validateRequest(request, env)) return err('UNAUTHORIZED', null, 401);
   if (await isActionRunning(env)) return err('ACTION_RUNNING', null, 503);
   const key = decodeURIComponent(path.slice('/api/queue/'.length));
   if (!key.startsWith(UPLOAD_PREFIX)) return err('INVALID_REQUEST', null, 400);
@@ -63,7 +69,7 @@ async function handleQueueDelete(env: Env, request: Request, path: string) {
 }
 
 async function handlePresign(env: Env, request: Request) {
-  if (!validateApiKey(request, env)) return err('UNAUTHORIZED', null, 401);
+  if (!validateRequest(request, env)) return err('UNAUTHORIZED', null, 401);
   let body: { hash?: string; size?: number; title?: string };
   try { body = await request.json(); } catch { return err('INVALID_REQUEST', null, 400); }
   const { hash, size, title } = body;
@@ -83,7 +89,7 @@ async function handlePresign(env: Env, request: Request) {
 }
 
 async function handleComplete(env: Env, request: Request) {
-  if (!validateApiKey(request, env)) return err('UNAUTHORIZED', null, 401);
+  if (!validateRequest(request, env)) return err('UNAUTHORIZED', null, 401);
   let body: { hash?: string; title?: string };
   try { body = await request.json(); } catch { return err('INVALID_REQUEST', null, 400); }
   const { hash, title } = body;
@@ -102,7 +108,7 @@ async function handleComplete(env: Env, request: Request) {
 }
 
 async function handleTrigger(env: Env, request: Request) {
-  if (!validateApiKey(request, env)) return err('UNAUTHORIZED', null, 401);
+  if (!validateRequest(request, env)) return err('UNAUTHORIZED', null, 401);
   if (await isActionRunning(env)) return err('ACTION_RUNNING', null, 503);
 
   const { CONTENT_OWNER, CONTENT_REPO, GITHUB_OWNER, GITHUB_REPO, GITHUB_TOKEN } = env;
@@ -115,7 +121,7 @@ async function handleTrigger(env: Env, request: Request) {
 }
 
 async function handleNovelCheck(env: Env, request: Request, path: string) {
-  if (!validateApiKey(request, env)) return err('UNAUTHORIZED', null, 401);
+  if (!validateRequest(request, env)) return err('UNAUTHORIZED', null, 401);
   const hash = path.slice('/api/novel/'.length);
   if (!HASH_REGEX.test(hash)) return err('INVALID_REQUEST', null, 400);
   const { CONTENT_OWNER, CONTENT_REPO, GITHUB_TOKEN } = env;
@@ -125,4 +131,106 @@ async function handleNovelCheck(env: Env, request: Request, path: string) {
   if (!release) return json({ exists: false });
   const tags = await listReleaseTags(CONTENT_OWNER, CONTENT_REPO, hash, GITHUB_TOKEN);
   return json({ exists: true, guri: `urn:novel:sha256:${hash}`, tags, releaseUrl: release.htmlUrl });
+}
+
+/* ── 书籍 API ───────────────────────────────── */
+
+interface BookEntry { h: string; t: string; a: string; c: number; p: number; d: string; tag: string }
+
+let indexCache: { books: BookEntry[]; ts: number } | null = null
+const INDEX_TTL = 60_000
+const ASSET_TTL = 86400
+
+async function getIndex(env: Env): Promise<BookEntry[]> {
+  if (indexCache && Date.now() - indexCache.ts < INDEX_TTL) return indexCache.books
+  const { CONTENT_OWNER, CONTENT_REPO, GITHUB_TOKEN } = env
+  const raw = await getPageContent(CONTENT_OWNER, CONTENT_REPO, 'index.json', GITHUB_TOKEN)
+  const books = raw ? JSON.parse(raw).books || [] : []
+  indexCache = { books, ts: Date.now() }
+  return books
+}
+
+async function proxyAsset(
+  env: Env, request: Request, ctx: ExecutionContext,
+  tag: string, assetName: string,
+): Promise<Response> {
+  const { CONTENT_OWNER, CONTENT_REPO, GITHUB_TOKEN } = env
+  const cache = caches.default
+  const cached = await cache.match(request)
+  if (cached) return cached
+
+  const asset = await getReleaseAsset(CONTENT_OWNER, CONTENT_REPO, tag, assetName, GITHUB_TOKEN)
+  if (!asset) return err('NOT_FOUND', null, 404)
+
+  const res = await downloadReleaseAsset(CONTENT_OWNER, CONTENT_REPO, asset.id, GITHUB_TOKEN)
+  if (!res.ok) return err('NOT_FOUND', null, 404)
+
+  const headers = new Headers(res.headers)
+  headers.set('Cache-Control', `public, max-age=${ASSET_TTL}, immutable`)
+  const response = new Response(res.body, { status: res.status, headers })
+
+  ctx.waitUntil(cache.put(request, response.clone()))
+  return response
+}
+
+async function handleBooksList(env: Env, request: Request) {
+  if (!validateRequest(request, env)) return err('UNAUTHORIZED', null, 401)
+  const q = new URL(request.url).searchParams.get('q')?.trim().toLowerCase() || ''
+  const books = await getIndex(env)
+  if (!q) return json(books)
+  const filtered = books.filter(b =>
+    b.t.toLowerCase().includes(q) || b.a.toLowerCase().includes(q))
+  return json(filtered)
+}
+
+async function handleBooksRoute(env: Env, request: Request, path: string, ctx: ExecutionContext) {
+  if (!validateRequest(request, env)) return err('UNAUTHORIZED', null, 401)
+  const rest = path.slice('/api/books/'.length)
+  const slash = rest.indexOf('/')
+  const hash = slash === -1 ? rest : rest.substring(0, slash)
+  const sub = slash === -1 ? '' : rest.substring(slash + 1)
+
+  if (!HASH_REGEX.test(hash)) return err('INVALID_REQUEST', null, 400)
+
+  if (!sub) {
+    const books = await getIndex(env)
+    const book = books.find(b => b.h === hash)
+    if (!book) return err('NOT_FOUND', null, 404)
+    return json(book)
+  }
+
+  if (sub === 'toc') {
+    const { CONTENT_OWNER, CONTENT_REPO, GITHUB_TOKEN } = env
+    const cache = caches.default
+    const cached = await cache.match(request)
+    if (cached) return cached
+
+    const tag = `v${hash}0`
+    const asset = await getReleaseAsset(CONTENT_OWNER, CONTENT_REPO, tag, 'toc.json', GITHUB_TOKEN)
+    if (!asset) return err('NOT_FOUND', null, 404)
+
+    const res = await downloadReleaseAsset(CONTENT_OWNER, CONTENT_REPO, asset.id, GITHUB_TOKEN)
+    if (!res.ok) return err('NOT_FOUND', null, 404)
+    const toc = await res.json()
+
+    const headers = new Headers({ 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': `public, max-age=${ASSET_TTL}` })
+    const response = new Response(JSON.stringify(toc), { headers })
+    ctx.waitUntil(cache.put(request, response.clone()))
+    return response
+  }
+
+  if (sub === 'cover') {
+    return proxyAsset(env, request, ctx, `v${hash}0`, 'cover.jpg')
+  }
+
+  if (sub.startsWith('chapters/')) {
+    const chKey = sub.slice('chapters/'.length)
+    const chHashLen = 12
+    const partStr = chKey.substring(0, chKey.length - chHashLen)
+    const partIdx = partStr ? parseInt(partStr, 10) : 0
+    const tag = `v${hash}${partIdx}`
+    return proxyAsset(env, request, ctx, tag, `${chKey}.txt`)
+  }
+
+  return err('NOT_FOUND', null, 404)
 }

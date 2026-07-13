@@ -52,21 +52,31 @@ async function ensureWorkflow(
 ) {
   const yml = WORKFLOW_YML.replace('__CODE_REPO__', `${codeOwner}/${codeRepo}`)
   const content = btoa(yml)
+  let sha: string | undefined
   try {
     const { data } = await octo.rest.repos.getContent({
       owner: contentOwner, repo: contentRepo, path: '.github/workflows/main.yml',
     })
-    return data
+    sha = (data as any).sha
   } catch (e: any) {
-    if (e.status !== 404) return
+    if (e.status !== 404) {
+      console.error('ensureWorkflow getContent error:', e.status, e.message)
+      return
+    }
   }
-  console.log('📝 自动创建 workflow 到内容仓库...')
-  await octo.rest.repos.createOrUpdateFileContents({
-    owner: contentOwner, repo: contentRepo,
-    path: '.github/workflows/main.yml',
-    message: '📝 初始化 novel 处理 workflow',
-    content,
-  })
+  try {
+    console.log('📝 自动' + (sha ? '更新' : '创建') + ' workflow 到内容仓库...')
+    await octo.rest.repos.createOrUpdateFileContents({
+      owner: contentOwner, repo: contentRepo,
+      path: '.github/workflows/main.yml',
+      message: '📝 初始化 novel 处理 workflow',
+      content,
+      ...(sha ? { sha } : {}),
+    })
+    console.log('✅ workflow ' + (sha ? '更新' : '创建') + '成功')
+  } catch (e: any) {
+    console.error('ensureWorkflow failed:', e.status, e.message)
+  }
 }
 
 /* ── 代码仓库 (触发 Action) ────────────────── */
@@ -105,7 +115,7 @@ export async function triggerWorkflow(
     })
     return true
   } catch (e: any) {
-    if (e.status === 404) {
+    if (e.status === 404 || e.status === 422) {
       await ensureWorkflow(octo, codeOwner, codeRepo, owner, repo)
       try {
         const inputs: Record<string, string> = {}
@@ -148,6 +158,50 @@ export async function checkReleaseExists(
   }
 }
 
+export async function getReleaseAsset(
+  owner: string, repo: string, tag: string, assetName: string, token: string,
+): Promise<{ id: number; contentType: string } | null> {
+  const octo = client(token)
+  try {
+    const { data } = await octo.rest.repos.getReleaseByTag({ owner, repo, tag })
+    for (const a of data.assets) {
+      if (a.name === assetName) {
+        return { id: a.id, contentType: a.content_type }
+      }
+    }
+    console.log(`asset "${assetName}" not found in [${data.assets.map(a => a.name).join(', ')}]`)
+  } catch (e: any) {
+    console.log(`release "${tag}" error:`, e.status, e.message)
+  }
+  return null
+}
+
+export async function downloadReleaseAsset(
+  owner: string, repo: string, assetId: number, token: string,
+): Promise<Response> {
+  const url = `https://api.github.com/repos/${owner}/${repo}/releases/assets/${assetId}`
+  return fetch(url, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: 'application/octet-stream',
+      'User-Agent': 'novel',
+      'X-GitHub-Api-Version': '2022-11-28',
+    },
+  })
+}
+
+export async function getPageContent(
+  owner: string, repo: string, path: string, token: string,
+): Promise<string | null> {
+  const octo = client(token)
+  try {
+    const { data } = await octo.rest.repos.getContent({ owner, repo, path })
+    const b64 = (data as any).content
+    const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0))
+    return new TextDecoder().decode(bytes)
+  } catch { /* */ }
+  return null
+}
 export async function listReleaseTags(
   owner: string, repo: string, hash: string, token: string,
 ): Promise<string[]> {

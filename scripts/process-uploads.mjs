@@ -57,6 +57,12 @@ async function downloadZip(key) {
   return Buffer.from(await res.arrayBuffer())
 }
 
+async function deleteFromR2(key) {
+  const url = `https://${HOSTNAME}/${R2_BUCKET}/${key}`
+  const res = await r2.fetch(url, { method: 'DELETE' })
+  if (!res.ok && res.status !== 404) console.warn(`  ⚠ 删除 R2 ${key} 失败: ${res.status}`)
+}
+
 /* ── GitHub 操作 ────────────────────────────── */
 
 async function releaseExists(tag) {
@@ -232,6 +238,7 @@ async function main() {
       const r = await processZip(key)
       if (r) { results.push(r); ok++ }
       else { skip++ }
+      await deleteFromR2(key)
     } catch (e) {
       console.error(`  ❌ ${key}:`, e.message)
       fail++

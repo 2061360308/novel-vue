@@ -1,18 +1,19 @@
 import type { Env } from './types';
 
-export function validateApiKey(request: Request, env: Env): boolean {
-  const header = request.headers.get('Authorization');
-  if (!header) return false;
-  const match = header.match(/^Bearer\s+(.+)$/i);
-  if (!match) return false;
+export function validateRequest(request: Request, env: Env): boolean {
+  if (!env.API_KEY) return false
 
-  const token = match[1];
-  const key = env.API_KEY;
-  if (!key) return false;
+  const header = request.headers.get('Authorization')
+  if (!header) return false
+  const m = header.match(/^Bearer\s+(.+)$/i)
+  if (!m) return false
 
-  let result = 0;
-  for (let i = 0; i < token.length; i++) {
-    result |= token.charCodeAt(i) ^ (key.charCodeAt(i) || 0);
-  }
-  return result === 0 && token.length === key.length;
+  return timingSafeEqual(m[1], env.API_KEY)
+}
+
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false
+  let result = 0
+  for (let i = 0; i < a.length; i++) result |= a.charCodeAt(i) ^ b.charCodeAt(i)
+  return result === 0
 }
