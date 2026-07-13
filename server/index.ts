@@ -177,10 +177,9 @@ async function handleBooksList(env: Env, request: Request) {
   if (!validateRequest(request, env)) return err('UNAUTHORIZED', null, 401)
   const q = new URL(request.url).searchParams.get('q')?.trim().toLowerCase() || ''
   const books = await getIndex(env)
-  if (!q) return json(books)
-  const filtered = books.filter(b =>
-    b.t.toLowerCase().includes(q) || b.a.toLowerCase().includes(q))
-  return json(filtered)
+  const result = q ? books.filter(b =>
+    b.t.toLowerCase().includes(q) || b.a.toLowerCase().includes(q)) : books
+  return json({ books: result })
 }
 
 async function handleBooksRoute(env: Env, request: Request, path: string, ctx: ExecutionContext) {
@@ -229,7 +228,22 @@ async function handleBooksRoute(env: Env, request: Request, path: string, ctx: E
     const partStr = chKey.substring(0, chKey.length - chHashLen)
     const partIdx = partStr ? parseInt(partStr, 10) : 0
     const tag = `v${hash}${partIdx}`
-    return proxyAsset(env, request, ctx, tag, `${chKey}.txt`)
+    const { CONTENT_OWNER, CONTENT_REPO, GITHUB_TOKEN } = env
+    const cache = caches.default
+    const cached = await cache.match(request)
+    if (cached) return cached
+
+    const asset = await getReleaseAsset(CONTENT_OWNER, CONTENT_REPO, tag, `${chKey}.txt`, GITHUB_TOKEN)
+    if (!asset) return err('NOT_FOUND', null, 404)
+
+    const res = await downloadReleaseAsset(CONTENT_OWNER, CONTENT_REPO, asset.id, GITHUB_TOKEN)
+    if (!res.ok) return err('NOT_FOUND', null, 404)
+    const text = await res.text()
+
+    const headers = new Headers({ 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': `public, max-age=${ASSET_TTL}, immutable` })
+    const response = new Response(JSON.stringify({ content: text }), { headers })
+    ctx.waitUntil(cache.put(request, response.clone()))
+    return response
   }
 
   return err('NOT_FOUND', null, 404)
