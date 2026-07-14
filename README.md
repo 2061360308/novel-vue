@@ -1,17 +1,15 @@
 # Legado Shelf
 
 <p align="center">
-
-  [![Stars](https://img.shields.io/github/stars/2061360308/legado-shelf?style=flat-square&color=yellow)](https://github.com/2061360308/legado-shelf)
-  [![License](https://img.shields.io/github/license/2061360308/legado-shelf?style=flat-square&color=blue)](LICENSE)
-  [![Deploy](https://img.shields.io/github/actions/workflow/status/2061360308/legado-shelf/deploy.yml?style=flat-square&label=deploy)](https://github.com/2061360308/legado-shelf/actions)
+  <a href="https://github.com/2061360308/legado-shelf"><img src="https://img.shields.io/github/stars/2061360308/legado-shelf?style=flat-square&color=yellow" alt="Stars"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/2061360308/legado-shelf?style=flat-square&color=blue" alt="License"></a>
+  <a href="https://github.com/2061360308/legado-shelf/actions"><img src="https://img.shields.io/github/actions/workflow/status/2061360308/legado-shelf/deploy.yml?style=flat-square&label=deploy" alt="Deploy"></a>
   <br>
-  ![Vue 3](https://img.shields.io/badge/Vue-3-4FC08D?style=flat-square&logo=vue.js)
-  ![TypeScript](https://img.shields.io/badge/TypeScript-blue?style=flat-square&logo=typescript)
-  ![Cloudflare](https://img.shields.io/badge/Cloudflare-F38020?style=flat-square&logo=cloudflare)
-  ![R2](https://img.shields.io/badge/R2-存储-orange?style=flat-square&logo=cloudflare)
-  ![Node](https://img.shields.io/badge/Node-22-339933?style=flat-square&logo=node.js)
-
+  <img src="https://img.shields.io/badge/Vue-3-4FC08D?style=flat-square&logo=vue.js" alt="Vue 3">
+  <img src="https://img.shields.io/badge/TypeScript-blue?style=flat-square&logo=typescript" alt="TypeScript">
+  <img src="https://img.shields.io/badge/Cloudflare-F38020?style=flat-square&logo=cloudflare" alt="Cloudflare">
+  <img src="https://img.shields.io/badge/R2-存储-orange?style=flat-square&logo=cloudflare" alt="R2">
+  <img src="https://img.shields.io/badge/Node-22-339933?style=flat-square&logo=node.js" alt="Node">
 </p>
 
 [Legado](https://github.com/gedoor/legado)（开源阅读）的云端书架。提供 Web 管理界面，可将本地 EPUB/TXT 上传至 GitHub Release 存储，通过定制书源随时在线阅读。
