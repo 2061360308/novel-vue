@@ -36,11 +36,10 @@
         <button class="btn btn-primary btn-sm" @click="lookup">查询</button>
       </div>
       <table v-if="archived">
-        <thead><tr><th>哈希</th><th>分片数</th><th>操作</th></tr></thead>
+        <thead><tr><th>哈希</th><th>操作</th></tr></thead>
         <tbody>
           <tr>
             <td class="hash-cell">{{ searchHash.slice(0, 16) }}...</td>
-            <td>{{ archived.tags.length }} 个分片</td>
             <td><a :href="archived.releaseUrl" target="_blank" class="btn btn-sm btn-primary">查看</a></td>
           </tr>
         </tbody>

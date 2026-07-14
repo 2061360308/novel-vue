@@ -1,5 +1,5 @@
 import { json, err } from '../lib/response'
-import { getPageContent, getReleaseAsset, downloadReleaseAsset, checkReleaseExists, listReleaseTags } from '../lib/github'
+import { getPageContent, getReleaseAsset, downloadReleaseAsset } from '../lib/github'
 import { HASH_REGEX } from '../../shared/constants'
 import type { Router } from '../lib/router'
 import type { Env } from '../lib/types'
@@ -28,7 +28,6 @@ const BookDetailSchema = {
   type: 'object' as const,
   properties: {
     ...BookEntrySchema.properties,
-    tags: { type: 'array', items: { type: 'string' }, description: '所有 Release tags', example: ['va1b2c3d4e5f60', 'va1b2c3d4e5f61'] },
     releaseUrl: { type: 'string', description: 'Release 页面 URL', example: 'https://github.com/user/content/releases/tag/va1b2c3d4e5f60' },
   },
 }
@@ -100,17 +99,17 @@ export function register(router: Router) {
     const book = books.find(b => b.h === hash)
     if (!book) return json({ exists: false })
 
-    const tags = await listReleaseTags(CONTENT_OWNER, CONTENT_REPO, hash, GH_PAT)
-    const tag0 = `v${hash}0`
-    const release = await checkReleaseExists(CONTENT_OWNER, CONTENT_REPO, tag0, GH_PAT)
-    return json({ ...book, tags, releaseUrl: release?.htmlUrl ?? '' })
+    return json({
+      ...book,
+      releaseUrl: `https://github.com/${CONTENT_OWNER}/${CONTENT_REPO}/releases/tag/${book.tag}`,
+    })
   }, {
     summary: '获取书籍详情',
-    description: '在索引中查找书籍，返回完整元数据及 Release 信息。未收录时返回 `{ exists: false }`。',
+    description: '在索引中查找书籍，返回完整元数据及 Release 链接。未收录时返回 `{ exists: false }`。',
     tags: ['Books'],
     params: HASH_PARAM,
     responses: {
-      '200': { description: '书籍详情（含 tags/releaseUrl），或 { exists: false }', content: { schema: BookDetailSchema } },
+      '200': { description: '书籍详情（含 releaseUrl），或 { exists: false }', content: { schema: BookDetailSchema } },
     },
   })
 
