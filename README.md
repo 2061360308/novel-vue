@@ -1,17 +1,58 @@
-# legado-shelf
+# Legado Shelf
+
+<p align="center">
+
+  [![Stars](https://img.shields.io/github/stars/2061360308/legado-shelf?style=flat-square&color=yellow)](https://github.com/2061360308/legado-shelf)
+  [![License](https://img.shields.io/github/license/2061360308/legado-shelf?style=flat-square&color=blue)](LICENSE)
+  [![Deploy](https://img.shields.io/github/actions/workflow/status/2061360308/legado-shelf/deploy.yml?style=flat-square&label=deploy)](https://github.com/2061360308/legado-shelf/actions)
+  <br>
+  ![Vue 3](https://img.shields.io/badge/Vue-3-4FC08D?style=flat-square&logo=vue.js)
+  ![TypeScript](https://img.shields.io/badge/TypeScript-blue?style=flat-square&logo=typescript)
+  ![Cloudflare](https://img.shields.io/badge/Cloudflare-F38020?style=flat-square&logo=cloudflare)
+  ![R2](https://img.shields.io/badge/R2-存储-orange?style=flat-square&logo=cloudflare)
+  ![Node](https://img.shields.io/badge/Node-22-339933?style=flat-square&logo=node.js)
+
+</p>
 
 [Legado](https://github.com/gedoor/legado)（开源阅读）的云端书架。提供 Web 管理界面，可将本地 EPUB/TXT 上传至 GitHub Release 存储，通过定制书源随时在线阅读。
 
+## 为什么用这个
+
+- **零服务器成本** — 部署在 Cloudflare Worker 免费计划内，GitHub Release 无限存储
+- **永久归属** — 书籍存在你自己的 GitHub 仓库里，不依赖任何第三方服务存活
+- **Legado 原生适配** — 标准书源 API，搜索/目录/章节/封面一个不落
+- **开箱即用** — 一键部署到 Cloudflare，5 分钟上线
+- **随处访问** — 云端 API，手机/电脑/阅读器任意设备随时拉取书架
+
 ## 特性
 
-- **Web 管理** — 拖拽上传 EPUB/TXT，编辑元数据，封面自动转 JPEG
-- **GitHub 存储** — 书籍按章节分片存入 GitHub Release，自动生成索引
-- **Cloudflare 驱动** — Worker + R2 全栈部署，全球边缘加速，无需服务器
-- **API 接口** — 搜索、目录、章节内容、封面，可接入自定书源
+- **拖拽上传** — 支持 EPUB/TXT，自动解析目录结构，封面提取并转 JPEG
+- **分片存储** — 书籍按章节分片存入 GitHub Release，单本百万字无压力
+- **动态处理** — Worker 触发 Content Repo Action，R2 凭证动态注入，无需手动配置密钥
+- **RESTful API** — `GET /api/books` 搜索、`/toc` 目录、`/chapters/:key` 内容、`/cover` 封面
+- **全球加速** — Cloudflare 边缘网络，世界任何角落秒级响应
 
-## 一键部署
+## 部署 & 使用
 
-部署教程见 [docs/deploy.md](docs/deploy.md)。
+部署教程见：[`部署说明`](docs/deploy.md)
+
+使用教程见：[`使用说明`](docs/usage.md)
+
+## 架构
+
+```
+前端 (Vue 3) ──→ Cloudflare Worker ──→ GitHub API (触发工作流)
+                      │                         │
+                 Cloudflare R2            Content Repo Action
+                 (上传暂存)                (处理 → Release)
+```
+
+## 技术栈
+
+- Vue 3 + Vue Router + TypeScript
+- Cloudflare Workers + R2
+- GitHub Actions + Octokit
+- JSZip + aws4fetch
 
 ## 本地开发
 
@@ -25,18 +66,11 @@ npm run dev
 
 浏览器打开 `http://localhost:5173`，输入 API Key。
 
-## 架构
+## 免责声明
 
-```
-前端 (Vue 3)  ──→  Cloudflare Worker  ──→  GitHub API
-                       │
-                  Cloudflare R2        GitHub Actions
-                  (上传暂存)            (Release 生成)
-```
+- **合理使用** — GitHub Release 适合存储少量电子书，请勿将其用作大规模盗版分发。滥用可能导致仓库被封。
+- **信息安全** — `API_KEY` 即你的登录凭证，请设置足够复杂。`GH_PAT` 和 R2 密钥泄露可能导致他人恶意使用你的资源，务必妥善保管。
 
-## 技术栈
+## License
 
-- Vue 3 + Vue Router + TypeScript
-- Cloudflare Workers + R2
-- GitHub Actions + Octokit
-- JSZip + aws4fetch
+项目采用[MIT](LICENSE)协议，欢迎贡献代码

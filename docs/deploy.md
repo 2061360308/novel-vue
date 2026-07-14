@@ -13,13 +13,13 @@
 1. GitHub → Settings → Developer settings → Personal access tokens → **Fine-grained tokens**
 2. Generate new token
 3. Resource owner：选择你的账号
-4. Repository access：选择 **Only select repositories**，勾选你的**内容仓库**和**代码仓库**
+4. Repository access：选择 **Only select repositories**，勾选你的**内容仓库**
 5. Permissions 设置以下权限：
 
-| 权限 | 级别 | 用途 |
-|------|------|------|
-| Contents | Read and write | 创建 Release、读写 index.json |
-| Actions | Read and write | 检查 Action 运行状态 |
+| 权限      | 级别           | 用途                           |
+| --------- | -------------- | ------------------------------ |
+| Contents  | Read and write | 创建 Release、读写 index.json  |
+| Actions   | Read and write | 检查 Action 运行状态           |
 | Workflows | Read and write | 触发工作流、写入 workflow 文件 |
 
 6. 生成后**立即复制**，离开页面后无法再查看
@@ -28,77 +28,67 @@
 
 注册 [Cloudflare](https://dash.cloudflare.com/sign-up)，验证邮箱。
 
-### 4. 创建 R2 存储桶
+### 4. 创建 Cloudflare 帐户 API 令牌
 
-1. Cloudflare Dashboard → R2 → 创建存储桶，名称随意（如 `novel`）
+1. Cloudflare Dashboard → 管理账户 → 帐户 API 令牌 → 创建令牌，名称随意（如 `novel`）
 2. 进入存储桶 → 设置 → R2 API 令牌 → 创建 API 令牌
-3. 权限选"对象读取和写入"
-4. 记录下：
-   - `Access Key ID`
-   - `Secret Access Key`
-   - `Endpoint`（形如 `https://xxxxx.r2.cloudflarestorage.com`）
+3. 给予以下权限：
+   - Workers R2 Storage Read
+   - Workers R2 Storage Write
+   - Workers Scripts Read
+   - Workers Scripts Write
+   - Account Settings Read
+4. 点击审核令牌，正确示例如下：
+   - 令牌摘要
+     名称
+     legado-shelf-deploy-token
+     过期时间
+     无过期时间
+     权限策略
+     整个 xxx's Account 账户
+     Workers R2 Storage Read
+     Workers R2 Storage Write
+     Workers Scripts Read
+     Workers Scripts Write
+     Account Settings Read
+5. 继续下一步创建令牌并记录下弹出的：
+   - 账户 ID
+   - API 令牌
+   - 【S3 兼容凭证】访问密钥 ID
+   - 【S3 兼容凭证】秘密访问密钥
+   - 【S3 兼容凭证】S3 API 端点
 
 ## 开始部署
 
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/2061360308/legado-shelf)
+1. Fork [当前仓库](https://github.com/2061360308/legado-shelf)到自己账户
 
-点击上方按钮 → 授权 Cloudflare 访问 GitHub → 在弹出的表格中填写以下变量 → 点击部署。
+2. 进入 Fork 后的仓库，点击 Settings → Secrets and variables → Actions 添加如下仓库级别 变量(Repository variables) 和 密钥(Repository secrets)
 
-## 环境变量
+   **环境变量-Repository variables**
 
-| 变量 | 来源 | 说明 |
-|------|------|------|
-| `API_KEY` | 自己设定 | 登录密钥，用于 Web 界面和 API 鉴权 |
-| `GH_PAT` | 前提准备 2 | 刚创建的 PAT |
-| `CONTENT_OWNER` | 前提准备 1 | 内容仓库的 owner |
-| `CONTENT_REPO` | 前提准备 1 | 内容仓库名 |
-| `R2_ENDPOINT` | 前提准备 4 | R2 端点地址 |
-| `R2_ACCESS_KEY_ID` | 前提准备 4 | R2 Access Key |
-| `R2_SECRET_ACCESS_KEY` | 前提准备 4 | R2 Secret Key |
-| `R2_BUCKET_NAME` | 前提准备 4 | R2 桶名 |
+   |       变量        | 是否必须 |                  来源                  |  默认值  |               说明               |
+   | :---------------: | :------: | :------------------------------------: | :------: | :------------------------------: |
+   |  `CONTENT_OWNER`  |    是    | [前提准备 1](#1-创建内容仓库) 中 owner |    无    |         内容仓库的 owner         |
+   |  `CONTENT_REPO`   |    是    | [前提准备 1](#1-创建内容仓库) 中 repo  |    无    |            内容仓库名            |
+   |    `SITE_URL`     |    否    |                   -                    |    无    | cloudfare 上为应用绑定的个人域名 |
+   |    `CACHE_TTL`    |    否    |                   -                    |    15    |     Action 工作状态缓存时间      |
+   | `MAX_UPLOAD_SIZE` |    否    |                   -                    | 52428800 | 上传文件大小的上限（默认 50MB）  |
 
-部署完成后，内容仓库需要额外设置（见下文）。
+   **密钥-Repository secrets**
 
-## 内容仓库设置
+   |          变量           | 是否必须 |                             来源                              |                       说明                       |
+   | :---------------------: | :------: | :-----------------------------------------------------------: | :----------------------------------------------: |
+   |        `API_KEY`        |    是    |                               -                               |               部署后访问站点的密码               |
+   |        `GH_PAT`         |    是    |          [前提准备 2](#2-创建-github-token) 中 Token          | 拥有内容仓库访问权限的 github Fine-grained token |
+   | `CLOUDFLARE_ACCOUNT_ID` |    是    |   [前提准备 4](#4-创建-cloudflare-帐户-api-令牌) 中 账户 ID   |                        -                         |
+   | `CLOUDFLARE_API_TOKEN`  |    是    |  [前提准备 4](#4-创建-cloudflare-帐户-api-令牌) 中 API 令牌   |                        -                         |
+   |      `R2_ENDPOINT`      |    是    | [前提准备 4](#4-创建-cloudflare-帐户-api-令牌) 中 S3 API 端点 |                        -                         |
+   |   `R2_ACCESS_KEY_ID`    |    是    | [前提准备 4](#4-创建-cloudflare-帐户-api-令牌) 中 访问密钥 ID |                        -                         |
+   | `R2_SECRET_ACCESS_KEY`  |    是    | [前提准备 4](#4-创建-cloudflare-帐户-api-令牌) 中 S3 API 端点 |                        -                         |
 
-部署完成后，在**内容仓库** Settings → Secrets and variables → Actions 中添加以下 Secrets，否则 Action 无法访问 R2：
+3. 进入 Fork 后的仓库，点击 Actions → Deploy → Run workflow（Branch main）启动部署工作流，等等部署完成
+4. 【可选】回到 cloudfare 为 应用绑定个人域名，绑定后需要给仓库填写`SITE_URL`变量
 
-| Secret | 值 |
-|--------|-----|
-| `R2_ENDPOINT` | 同上 |
-| `R2_ACCESS_KEY_ID` | 同上 |
-| `R2_SECRET_ACCESS_KEY` | 同上 |
-| `R2_BUCKET_NAME` | 同上 |
+## 后续干什么
 
-## 使用
-
-1. 打开 Cloudflare 分配的域名，输入 `API_KEY` 登录
-2. 上传 EPUB / TXT 文件
-3. 编辑元数据后点击"确认上传"
-4. 点击"触发处理"启动 Action 生成 Release
-5. 通过 API 获取书籍内容，或直接接入 Legado 书源
-
-### API
-
-所有 API 需要 `Authorization: Bearer {API_KEY}` 头部。
-
-| 接口 | 说明 |
-|------|------|
-| `GET /api/books?q=关键词` | 搜索/列出书籍 |
-| `GET /api/books/:hash/toc` | 书籍目录 |
-| `GET /api/books/:hash/cover` | 封面 |
-| `GET /api/books/:hash/chapters/:key` | 章节内容 |
-
-## 本地开发
-
-如需要本地修改调试：
-
-```bash
-git clone https://github.com/2061360308/legado-shelf.git
-cd legado-shelf
-npm install
-cp .dev.vars.example .dev.vars    # 填入配置
-npm run dev
-```
-
-前端 `localhost:5173`，后端 `localhost:8787`。
+项目提供了web管理面板与阅读书源供开箱使用，但也可以基于API自行拓展功能。具体使用说明见：[`使用说明`](./usage.md)。
