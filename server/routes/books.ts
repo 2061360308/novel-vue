@@ -24,6 +24,15 @@ const BookEntrySchema = {
   },
 }
 
+const BookDetailSchema = {
+  type: 'object' as const,
+  properties: {
+    ...BookEntrySchema.properties,
+    tags: { type: 'array', items: { type: 'string' }, description: '所有 Release tags', example: ['va1b2c3d4e5f60', 'va1b2c3d4e5f61'] },
+    releaseUrl: { type: 'string', description: 'Release 页面 URL', example: 'https://github.com/user/content/releases/tag/va1b2c3d4e5f60' },
+  },
+}
+
 async function getIndex(env: Env): Promise<BookEntry[]> {
   if (indexCache && Date.now() - indexCache.ts < INDEX_TTL) return indexCache.books
   const { CONTENT_OWNER, CONTENT_REPO, GH_PAT } = env
@@ -79,7 +88,7 @@ export function register(router: Router) {
     },
   })
 
-  // ── 详情 / 发布检查 ──
+  // ── 详情 ──
 
   router.get('/api/books/:hash', async (_req, env, _ctx, params) => {
     const hash = params.hash
@@ -89,25 +98,19 @@ export function register(router: Router) {
 
     const books = await getIndex(env)
     const book = books.find(b => b.h === hash)
-    if (book) {
-      const tags = await listReleaseTags(CONTENT_OWNER, CONTENT_REPO, hash, GH_PAT)
-      const tag0 = `v${hash}0`
-      const release = await checkReleaseExists(CONTENT_OWNER, CONTENT_REPO, tag0, GH_PAT)
-      return json({ ...book, tags, releaseUrl: release?.htmlUrl ?? '' })
-    }
+    if (!book) return json({ exists: false })
 
+    const tags = await listReleaseTags(CONTENT_OWNER, CONTENT_REPO, hash, GH_PAT)
     const tag0 = `v${hash}0`
     const release = await checkReleaseExists(CONTENT_OWNER, CONTENT_REPO, tag0, GH_PAT)
-    if (!release) return json({ exists: false })
-    const tags = await listReleaseTags(CONTENT_OWNER, CONTENT_REPO, hash, GH_PAT)
-    return json({ exists: true, guri: `urn:novel:sha256:${hash}`, tags, releaseUrl: release.htmlUrl })
+    return json({ ...book, tags, releaseUrl: release?.htmlUrl ?? '' })
   }, {
-    summary: '获取书籍详情/检查发布状态',
-    description: '从索引中查找书籍，若未收录则检查 Release 是否存在。',
+    summary: '获取书籍详情',
+    description: '在索引中查找书籍，返回完整元数据及 Release 信息。未收录时返回 `{ exists: false }`。',
     tags: ['Books'],
     params: HASH_PARAM,
     responses: {
-      '200': { description: '书籍元数据（含 tags/releaseUrl）或 { exists: false }', content: { schema: { type: 'object' } } },
+      '200': { description: '书籍详情（含 tags/releaseUrl），或 { exists: false }', content: { schema: BookDetailSchema } },
     },
   })
 
