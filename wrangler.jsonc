@@ -11,7 +11,7 @@
   "upload_source_maps": true,
   "compatibility_flags": ["nodejs_compat"],
 
-  "r2_buckets": [{ "binding": "LEGADO_SHELF_R2" }],
+  "r2_buckets": [{ "binding": "R2" }],
 
   "vars": {
     "CONTENT_OWNER": "",

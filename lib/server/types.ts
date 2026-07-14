@@ -1,5 +1,5 @@
 export interface Env {
-  LEGADO_SHELF_R2: R2Bucket;
+  R2: R2Bucket;
   ASSETS: Fetcher;
   API_KEY: string;
   GH_PAT: string;

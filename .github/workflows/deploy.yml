@@ -50,16 +50,19 @@ jobs:
       - name: Build
         run: npm install && npm run build
 
-      - name: Read R2 bucket name from config
-        id: config-read
+      - name: Read R2 bucket name
+        id: r2-config
         run: |
-          BUCKET_NAME=$(jq -r '.r2_buckets[0].bucket_name // .r2_buckets[0].binding' wrangler.jsonc)
-          if [ -z "$BUCKET_NAME" ] || [ "$BUCKET_NAME" = "null" ]; then
-            echo "❌ No R2 bucket binding found in wrangler.jsonc"
-            exit 1
-          fi
+          # 从 wrangler.jsonc 中提取 name 和 binding
+          NAME=$(jq -r '.name' wrangler.jsonc)
+          BINDING=$(jq -r '.r2_buckets[0].binding' wrangler.jsonc)
+
+          # 按 Cloudflare 规则拼接并转为小写
+          BUCKET_NAME=$(echo "${NAME}-${BINDING}" | tr '[:upper:]' '[:lower:]')
+          
+          echo "✅ Constructed R2 bucket name: $BUCKET_NAME"
           echo "R2_BUCKET_NAME=$BUCKET_NAME" >> $GITHUB_ENV
-          echo "✅ R2 bucket name: $BUCKET_NAME"
+          echo "r2-bucket-name=$BUCKET_NAME" >> $GITHUB_OUTPUT
 
       - name: Bundle process script
         run: npx esbuild support/content_repo_workflow/process-uploads.mjs --bundle --platform=node --format=esm --outfile=support/content_repo_workflow/process-uploads.bundle.mjs
