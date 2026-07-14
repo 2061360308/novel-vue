@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@octokit/rest": "^22.0.1",
+    "@scalar/api-reference": "^1.62.5",
     "aws4fetch": "^1.0.20",
     "jszip": "^3.10.1",
     "vue": "^3.5.38",

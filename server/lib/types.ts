@@ -13,6 +13,13 @@ export interface Env {
   MAX_UPLOAD_SIZE: string;
 }
 
+export interface R2Input {
+  R2_ENDPOINT: string
+  R2_ACCESS_KEY_ID: string
+  R2_SECRET_ACCESS_KEY: string
+  R2_BUCKET_NAME: string
+}
+
 export type ErrorCode =
   | 'UNAUTHORIZED'
   | 'ACTION_RUNNING'
@@ -27,15 +34,4 @@ export interface ErrorBody {
   error: true;
   code: ErrorCode;
   message: string;
-}
-
-export function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json; charset=utf-8' },
-  });
-}
-
-export function err(code: ErrorCode, message: string, status = 400): Response {
-  return json({ error: true, code, message } as ErrorBody, status);
 }

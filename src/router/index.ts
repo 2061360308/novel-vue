@@ -6,6 +6,7 @@ const router = createRouter({
   routes: [
     { path: '/', name: 'home', component: ManagerView },
     { path: '/upload', name: 'upload', component: () => import('../views/UploadView.vue') },
+    { path: '/docs', name: 'docs', component: () => import('../views/ApiDocs.vue') },
   ],
 })
 

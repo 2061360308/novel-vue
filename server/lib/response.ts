@@ -2,12 +2,12 @@ export function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: { 'Content-Type': 'application/json; charset=utf-8' },
-  });
+  })
 }
 
 export function err(code: string, message: string | null, status = 400): Response {
-  const msg = message || errMessages[code] || code;
-  return json({ error: true, code, message: msg }, status);
+  const msg = message || errMessages[code] || code
+  return json({ error: true, code, message: msg }, status)
 }
 
 const errMessages: Record<string, string> = {
@@ -19,4 +19,4 @@ const errMessages: Record<string, string> = {
   R2_ERROR: '存储操作失败',
   GITHUB_ERROR: 'GitHub 配置缺失',
   INTERNAL_ERROR: '服务器内部错误',
-};
+}
