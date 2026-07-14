@@ -12,7 +12,14 @@ export function register(router: Router) {
     return json({ triggered: ok })
   }, {
     summary: '触发处理工作流',
+    description: '手动触发 Content Repo 的 GitHub Action，处理 R2 中所有待处理上传。',
     tags: ['Action'],
-    responses: { '200': { description: '{ triggered: boolean }' } }
+    responses: {
+      '200': {
+        description: '触发结果',
+        content: { schema: { type: 'object', properties: { triggered: { type: 'boolean', description: '是否触发成功', example: true } } } },
+      },
+      '503': { description: '已有 Action 正在运行' },
+    },
   })
 }

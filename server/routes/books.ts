@@ -9,6 +9,30 @@ interface BookEntry { h: string; t: string; a: string; c: number; p: number; d: 
 let indexCache: { books: BookEntry[]; ts: number } | null = null
 const INDEX_TTL = 60_000
 const ASSET_TTL = 86400
+const HASH_PARAM = { hash: { type: 'string' as const, description: '书籍 hash', pattern: '^[a-f0-9]{12,64}$', example: 'a1b2c3d4e5f6' } }
+
+const BookEntrySchema = {
+  type: 'object' as const,
+  properties: {
+    h: { type: 'string', description: '书籍 hash', example: 'a1b2c3d4e5f6' },
+    t: { type: 'string', description: '书名', example: '三体' },
+    a: { type: 'string', description: '作者', example: '刘慈欣' },
+    c: { type: 'integer', description: '章节数', example: 100 },
+    p: { type: 'integer', description: '分片数', example: 3 },
+    d: { type: 'string', format: 'date-time', description: '创建时间' },
+    tag: { type: 'string', description: '首 Release tag', example: 'vabc1230' },
+  },
+}
+
+const NovelCheckSchema = {
+  type: 'object' as const,
+  properties: {
+    exists: { type: 'boolean', description: '是否已发布' },
+    guri: { type: 'string', description: 'URN', example: 'urn:novel:sha256:abc123' },
+    tags: { type: 'array', items: { type: 'string' }, description: '所有 Release tags', example: ['vabc1230', 'vabc1231'] },
+    releaseUrl: { type: 'string', description: 'Release 页面 URL' },
+  },
+}
 
 async function getIndex(env: Env): Promise<BookEntry[]> {
   if (indexCache && Date.now() - indexCache.ts < INDEX_TTL) return indexCache.books
@@ -39,6 +63,8 @@ async function proxyAsset(
 }
 
 export function register(router: Router) {
+  // ── 列表 / 搜索 ──
+
   router.get('/api/books', async (req, env) => {
     const q = new URL(req.url).searchParams.get('q')?.trim().toLowerCase() || ''
     const books = await getIndex(env)
@@ -47,12 +73,25 @@ export function register(router: Router) {
     return json({ books: result })
   }, {
     summary: '搜索/列出书籍',
+    description: '获取全部书籍列表，通过 `q` 参数可按书名或作者搜索。',
     tags: ['Books'],
-    query: { q: { description: '搜索关键词（可选）', required: false } },
-    responses: { '200': { description: '{ books: BookEntry[] }', type: 'object' } }
+    query: { q: { description: '搜索关键词（可选）', example: '三体', required: false } },
+    responses: {
+      '200': {
+        description: '书籍列表',
+        content: {
+          schema: {
+            type: 'object',
+            properties: { books: { type: 'array', items: BookEntrySchema } },
+          },
+        },
+      },
+    },
   })
 
-  router.get('/api/books/:hash', async (req, env, _ctx, params) => {
+  // ── 详情 ──
+
+  router.get('/api/books/:hash', async (_req, env, _ctx, params) => {
     const hash = params.hash
     if (!HASH_REGEX.test(hash)) return err('INVALID_REQUEST', null, 400)
     const books = await getIndex(env)
@@ -62,9 +101,14 @@ export function register(router: Router) {
   }, {
     summary: '获取书籍详情',
     tags: ['Books'],
-    params: { hash: { description: '书籍 hash' } },
-    responses: { '200': { description: 'BookEntry', type: 'object' } }
+    params: HASH_PARAM,
+    responses: {
+      '200': { description: '书籍元数据', content: { schema: BookEntrySchema } },
+      '404': { description: '未找到' },
+    },
   })
+
+  // ── 目录 ──
 
   router.get('/api/books/:hash/toc', async (req, env, ctx, params) => {
     const hash = params.hash
@@ -88,10 +132,30 @@ export function register(router: Router) {
     return response
   }, {
     summary: '获取书籍目录',
+    description: '返回书籍的完整目录结构（TOC），缓存 24 小时。',
     tags: ['Books'],
-    params: { hash: { description: '书籍 hash' } },
-    responses: { '200': { description: 'TocEntry[]', type: 'array' } }
+    params: HASH_PARAM,
+    responses: {
+      '200': {
+        description: '目录数据',
+        content: {
+          schema: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                k: { type: 'string', description: '章节 key', example: '0123456789ab' },
+                t: { type: 'string', description: '章节标题', example: '第一章 初见' },
+                l: { type: 'integer', description: '层级', example: 0 },
+              },
+            },
+          },
+        },
+      },
+    },
   })
+
+  // ── 封面 ──
 
   router.get('/api/books/:hash/cover', async (req, env, ctx, params) => {
     const hash = params.hash
@@ -99,10 +163,13 @@ export function register(router: Router) {
     return proxyAsset(env, req, ctx, `v${hash}0`, 'cover.jpg')
   }, {
     summary: '获取书籍封面',
+    description: '返回 JPEG 封面图，缓存 24 小时。',
     tags: ['Books'],
-    params: { hash: { description: '书籍 hash' } },
-    responses: { '200': { description: 'image/jpeg' } }
+    params: HASH_PARAM,
+    responses: { '200': { description: 'JPEG 图片', content: { schema: { type: 'string', example: '' } } } },
   })
+
+  // ── 章节 ──
 
   router.get('/api/books/:hash/chapters/:key', async (req, env, ctx, params) => {
     const hash = params.hash
@@ -130,13 +197,26 @@ export function register(router: Router) {
     return response
   }, {
     summary: '获取章节内容',
+    description: '返回章节正文，缓存 24 小时。`key` 由目录接口中的 `k` 字段提供。',
     tags: ['Books'],
     params: {
-      hash: { description: '书籍 hash' },
-      key: { description: '章节 key (如 0a1b2c3d4e5f)' }
+      hash: { ...HASH_PARAM.hash },
+      key: { type: 'string', description: '章节 key', example: '0123456789ab', minLength: 12 },
     },
-    responses: { '200': { description: '{ content: string }', type: 'object' } }
+    responses: {
+      '200': {
+        description: '章节内容',
+        content: {
+          schema: {
+            type: 'object',
+            properties: { content: { type: 'string', description: '章节正文', example: '第一章内容...' } },
+          },
+        },
+      },
+    },
   })
+
+  // ── 发布检查 ──
 
   router.get('/api/novel/:hash', async (_req, env, _ctx, params) => {
     const hash = params.hash
@@ -150,8 +230,11 @@ export function register(router: Router) {
     return json({ exists: true, guri: `urn:novel:sha256:${hash}`, tags, releaseUrl: release.htmlUrl })
   }, {
     summary: '检查书籍是否已发布',
+    description: '通过 hash 查询书籍是否已在 Content Repo 中生成 Release。',
     tags: ['Books'],
-    params: { hash: { description: '书籍 hash' } },
-    responses: { '200': { description: '{ exists, guri?, tags?, releaseUrl? }', type: 'object' } }
+    params: HASH_PARAM,
+    responses: {
+      '200': { description: 'exists=true 时包含 guri/tags/releaseUrl', content: { schema: NovelCheckSchema } },
+    },
   })
 }

@@ -73,7 +73,7 @@ onMounted(() => {
 <style scoped>
 /* 样式保持不变 */
 .docs-wrapper {
-  height: 100vh;
+  height: calc(100vh - 56px);
   width: 100%;
   position: relative;
 }

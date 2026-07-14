@@ -2,10 +2,53 @@ import { err } from './response'
 import { validateRequest } from './auth'
 import type { Env } from './types'
 
-export interface ParamSchema {
+/* ── 类型定义 ─────────────────────────────── */
+
+export interface ParamDef {
   type?: string
+  format?: string
+  description?: string
+  example?: string | number
+  required?: boolean
+  pattern?: string
+  minLength?: number
+  maxLength?: number
+}
+
+export interface QueryDef extends ParamDef {}
+
+export interface SchemaProperty {
+  type: string
+  format?: string
+  description?: string
+  example?: any
+  enum?: any[]
+  items?: { type: string }
+}
+
+export interface ObjectSchema {
+  type: 'object'
+  properties: Record<string, SchemaProperty>
+  required?: string[]
+  example?: any
+}
+
+export interface ArraySchema {
+  type: 'array'
+  items: ObjectSchema | { type: string }
+}
+
+export type Schema = ObjectSchema | ArraySchema | { type: string; example?: any }
+
+export interface RequestBodyDef {
   description?: string
   required?: boolean
+  content: { schema: Schema }
+}
+
+export interface ResponseDef {
+  description: string
+  content?: { schema: Schema }
 }
 
 export interface RouteMeta {
@@ -13,10 +56,11 @@ export interface RouteMeta {
   description?: string
   tags?: string[]
   auth?: boolean
-  params?: Record<string, ParamSchema>
-  query?: Record<string, { type?: string; description?: string; required?: boolean }>
-  requestBody?: { type: string; description?: string }
-  responses?: Record<string, { description: string; type?: string }>
+  operationId?: string
+  params?: Record<string, ParamDef>
+  query?: Record<string, QueryDef>
+  requestBody?: RequestBodyDef
+  responses?: Record<string, ResponseDef>
 }
 
 export type Handler = (
@@ -31,30 +75,62 @@ interface Route {
   meta: RouteMeta
 }
 
+/* ── 共享 Schema ──────────────────────────── */
+
+const ERROR_SCHEMA: ObjectSchema = {
+  type: 'object',
+  properties: {
+    error: { type: 'boolean', description: '始终为 true', example: true },
+    code: { type: 'string', description: '错误码', example: 'NOT_FOUND' },
+    message: { type: 'string', description: '错误描述', example: '资源不存在' },
+  },
+  required: ['error', 'code', 'message'],
+}
+
+function errResponse(description: string): ResponseDef {
+  return { description, content: { schema: ERROR_SCHEMA } }
+}
+
+/* ── operationId 生成 ─────────────────────── */
+
+function toOperationId(method: string, pathname: string): string {
+  const parts = pathname
+    .replace(/^\/api\//, '')
+    .split('/')
+    .map(p => p.startsWith(':') ? p.slice(1) : p)
+    .filter(Boolean)
+    .map((p, i) =>
+      i === 0 ? p : p.charAt(0).toUpperCase() + p.slice(1)
+    )
+    .join('')
+  const verb = method.toLowerCase()
+  return parts.startsWith(verb) ? parts : verb + parts.charAt(0).toUpperCase() + parts.slice(1)
+}
+
+/* ── Router ───────────────────────────────── */
+
 export class Router {
   private routes: Route[] = []
-  private title: string
-  private version: string
+  private info: { title: string; version: string }
 
   constructor(info: { title: string; version: string }) {
-    this.title = info.title
-    this.version = info.version
+    this.info = info
   }
 
   private add(methods: string[], path: string, handler: Handler, meta: RouteMeta = {}) {
-    const pattern = new URLPattern({ pathname: path })
-    this.routes.push({ methods, pattern, handler, meta: { auth: true, ...meta } })
+    meta.operationId ??= toOperationId(methods[0], path)
+    meta.auth ??= true
+    this.routes.push({
+      methods,
+      pattern: new URLPattern({ pathname: path }),
+      handler,
+      meta,
+    })
   }
 
-  get(path: string, handler: Handler, meta?: RouteMeta) {
-    this.add(['GET'], path, handler, meta)
-  }
-  post(path: string, handler: Handler, meta?: RouteMeta) {
-    this.add(['POST'], path, handler, meta)
-  }
-  delete(path: string, handler: Handler, meta?: RouteMeta) {
-    this.add(['DELETE'], path, handler, meta)
-  }
+  get(path: string, handler: Handler, meta?: RouteMeta) { this.add(['GET'], path, handler, meta) }
+  post(path: string, handler: Handler, meta?: RouteMeta) { this.add(['POST'], path, handler, meta) }
+  delete(path: string, handler: Handler, meta?: RouteMeta) { this.add(['DELETE'], path, handler, meta) }
 
   async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response | null> {
     const url = new URL(req.url)
@@ -84,58 +160,83 @@ export class Router {
     const tags = new Set<string>()
 
     for (const { methods, pattern, meta } of this.routes) {
-      const pathKey = pattern.pathname
-        .replace(/:(\w+)/g, '{$1}')
+      const pathKey = pattern.pathname.replace(/:(\w+)/g, '{$1}')
       if (!paths[pathKey]) paths[pathKey] = {}
 
+      const defaultResponses: Record<string, ResponseDef> = {
+        '400': errResponse('请求参数错误'),
+        '401': errResponse('未授权'),
+        '500': errResponse('服务器内部错误'),
+      }
+
+      const responses: Record<string, any> = {}
+      for (const [code, def] of Object.entries(meta.responses || {})) {
+        responses[code] = {
+          description: def.description,
+          ...(def.content ? { content: { 'application/json': { schema: def.content.schema } } } : {}),
+        }
+      }
+      // 只加 handler 未覆盖的默认错误响应
+      for (const [code, def] of Object.entries(defaultResponses)) {
+        if (!responses[code]) {
+          responses[code] = { description: def.description, content: { 'application/json': { schema: def.content!.schema } } }
+        }
+      }
+
       const operation: any = {
+        operationId: meta.operationId,
         summary: meta.summary || '',
         description: meta.description || '',
         tags: meta.tags || ['default'],
-        responses: meta.responses || {}
+        responses,
       }
 
-      if (!operation.responses['400']) {
-        operation.responses['400'] = { description: '参数错误' }
-      }
-      if (meta.auth !== false && !operation.responses['401']) {
-        operation.responses['401'] = { description: '未授权' }
-      }
-      if (!operation.responses['500']) {
-        operation.responses['500'] = { description: '服务器错误' }
+      if (meta.auth !== false) {
+        operation.security = [{ ApiKeyAuth: [] }]
       }
 
       if (meta.params) {
-        operation.parameters = operation.parameters || []
-        for (const [name, schema] of Object.entries(meta.params)) {
+        for (const [name, s] of Object.entries(meta.params)) {
+          operation.parameters = operation.parameters || []
           operation.parameters.push({
-            name, in: 'path', required: schema.required ?? true,
-            schema: { type: schema.type || 'string' },
-            description: schema.description || '',
+            name, in: 'path', required: s.required ?? true,
+            schema: {
+              type: s.type || 'string',
+              ...(s.format ? { format: s.format } : {}),
+              ...(s.pattern ? { pattern: s.pattern } : {}),
+              ...(s.example !== undefined ? { example: s.example } : {}),
+              ...(s.minLength ? { minLength: s.minLength } : {}),
+              ...(s.maxLength ? { maxLength: s.maxLength } : {}),
+            },
+            description: s.description || '',
           })
         }
       }
 
       if (meta.query) {
-        operation.parameters = operation.parameters || []
-        for (const [name, schema] of Object.entries(meta.query)) {
+        for (const [name, s] of Object.entries(meta.query)) {
+          operation.parameters = operation.parameters || []
           operation.parameters.push({
-            name, in: 'query', required: schema.required ?? false,
-            schema: { type: schema.type || 'string' },
-            description: schema.description || '',
+            name, in: 'query', required: s.required ?? false,
+            schema: {
+              type: s.type || 'string',
+              ...(s.format ? { format: s.format } : {}),
+              ...(s.example !== undefined ? { example: s.example } : {}),
+            },
+            description: s.description || '',
           })
         }
       }
 
       if (meta.requestBody) {
         operation.requestBody = {
-          content: { 'application/json': { schema: { type: meta.requestBody.type } } },
+          required: meta.requestBody.required ?? true,
           description: meta.requestBody.description || '',
+          content: { 'application/json': { schema: meta.requestBody.content.schema } },
         }
       }
 
       for (const tag of (meta.tags || ['default'])) tags.add(tag)
-
       for (const method of methods) {
         paths[pathKey][method.toLowerCase()] = operation
       }
@@ -143,7 +244,32 @@ export class Router {
 
     return {
       openapi: '3.0.3',
-      info: { title: this.title, version: this.version },
+      info: { title: this.info.title, version: this.info.version },
+      servers: [
+        { url: 'https://{worker}.workers.dev', description: 'Cloudflare Workers', variables: { worker: { default: 'legado-shelf' } } },
+      ],
+      security: [{ ApiKeyAuth: [] }],
+      components: {
+        securitySchemes: {
+          ApiKeyAuth: {
+            type: 'apiKey',
+            in: 'header',
+            name: 'authorization',
+            description: 'Bearer {API_KEY}',
+          },
+        },
+        schemas: {
+          Error: {
+            type: 'object',
+            properties: {
+              error: { type: 'boolean', example: true },
+              code: { type: 'string', example: 'NOT_FOUND' },
+              message: { type: 'string', example: '资源不存在' },
+            },
+            required: ['error', 'code', 'message'],
+          },
+        },
+      },
       paths,
       tags: [...tags].map(name => ({ name })),
     }
