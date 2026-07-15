@@ -19,7 +19,7 @@ export function register(router: Router) {
         description: '触发结果',
         content: { schema: { type: 'object', properties: { triggered: { type: 'boolean', description: '是否触发成功', example: true } } } },
       },
-      '503': { description: '已有 Action 正在运行' },
+      '503': { description: '[ACTION_RUNNING] 已有 Action 正在运行' },
     },
   })
 }

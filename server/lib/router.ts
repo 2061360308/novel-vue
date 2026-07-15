@@ -81,14 +81,20 @@ const ERROR_SCHEMA: ObjectSchema = {
   type: 'object',
   properties: {
     error: { type: 'boolean', description: '始终为 true', example: true },
-    code: { type: 'string', description: '错误码', example: 'NOT_FOUND' },
+    code: { type: 'string', description: '错误码，如 NOT_FOUND / UNAUTHORIZED / DUPLICATE_HASH 等', example: 'NOT_FOUND' },
     message: { type: 'string', description: '错误描述', example: '资源不存在' },
   },
   required: ['error', 'code', 'message'],
 }
 
-function errResponse(description: string): ResponseDef {
-  return { description, content: { schema: ERROR_SCHEMA } }
+function errResponse(code: string, description: string): ResponseDef {
+  return { description: `[${code}] ${description}`, content: { schema: ERROR_SCHEMA } }
+}
+
+const DEFAULT_ERRORS: Record<string, { code: string; desc: string }> = {
+  '400': { code: 'INVALID_REQUEST', desc: '请求参数无效' },
+  '401': { code: 'UNAUTHORIZED', desc: '未授权，请提供有效的 API Key' },
+  '500': { code: 'INTERNAL_ERROR', desc: '服务器内部错误' },
 }
 
 /* ── operationId 生成 ─────────────────────── */
@@ -163,23 +169,20 @@ export class Router {
       const pathKey = pattern.pathname.replace(/:(\w+)/g, '{$1}')
       if (!paths[pathKey]) paths[pathKey] = {}
 
-      const defaultResponses: Record<string, ResponseDef> = {
-        '400': errResponse('请求参数错误'),
-        '401': errResponse('未授权'),
-        '500': errResponse('服务器内部错误'),
-      }
-
       const responses: Record<string, any> = {}
+
+      // 自定义响应
       for (const [code, def] of Object.entries(meta.responses || {})) {
         responses[code] = {
           description: def.description,
           ...(def.content ? { content: { 'application/json': { schema: def.content.schema } } } : {}),
         }
       }
-      // 只加 handler 未覆盖的默认错误响应
-      for (const [code, def] of Object.entries(defaultResponses)) {
+
+      // 补充未覆盖的默认错误响应
+      for (const [code, e] of Object.entries(DEFAULT_ERRORS)) {
         if (!responses[code]) {
-          responses[code] = { description: def.description, content: { 'application/json': { schema: def.content!.schema } } }
+          responses[code] = { description: `[${e.code}] ${e.desc}`, content: { 'application/json': { schema: ERROR_SCHEMA } } }
         }
       }
 

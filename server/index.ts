@@ -6,16 +6,18 @@ import { register as registerQueue } from './routes/queue'
 import { register as registerUpload } from './routes/upload'
 import { register as registerTrigger } from './routes/trigger'
 import { register as registerBooks } from './routes/books'
+import { register as registerBookSource } from './routes/booksource'
 
 const router = new Router({ title: 'legado-shelf', version: '1.0.0' })
 registerQueue(router)
 registerUpload(router)
 registerTrigger(router)
 registerBooks(router)
+registerBookSource(router)
 
 router.get('/api/openapi.json', () => {
   return json(router.toOpenAPIDoc())
-}, { auth: false, summary: 'OpenAPI 文档', tags: ['Meta'] })
+}, { auth: true, summary: 'OpenAPI 文档', tags: ['Meta'] })
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext) {

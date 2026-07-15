@@ -111,15 +111,12 @@ async function lookup() {
   archiveMsg.value = '查询中...'
   try {
     const r = await checkNovel(h)
-    if (r.exists) {
-      archived.value = r
-    } else {
-      archived.value = null
-      archiveMsg.value = '未找到该小说'
-    }
+    archived.value = r
   } catch (e: any) {
     archived.value = null
-    archiveMsg.value = '查询失败: ' + e.message
+    archiveMsg.value = e.message?.includes('NOT_FOUND') || e.message?.includes('HTTP 404')
+      ? '未找到该小说'
+      : '查询失败: ' + e.message
   }
 }
 
@@ -129,12 +126,10 @@ onMounted(async () => {
     searchHash.value = h
     try {
       const r = await checkNovel(h)
-      if (r.exists) {
-        uploadMsg.value = { type: 'success', html: `<strong>✓ 上传成功！小说已归档</strong><br><a href="${r.releaseUrl}" target="_blank">查看 Release</a>` }
-      } else {
-        uploadMsg.value = { type: 'info', html: '<strong>上传成功！</strong><br>点击上方「触发处理」按钮开始处理。' }
-      }
-    } catch { /* */ }
+      uploadMsg.value = { type: 'success', html: `<strong>✓ 上传成功！小说已归档</strong><br><a href="${r.releaseUrl}" target="_blank">查看 Release</a>` }
+    } catch {
+      uploadMsg.value = { type: 'info', html: '<strong>上传成功！</strong><br>点击上方「触发处理」按钮开始处理。' }
+    }
   }
   refresh()
 })
