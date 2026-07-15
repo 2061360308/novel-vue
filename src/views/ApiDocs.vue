@@ -5,7 +5,7 @@
       <p>文档加载失败：{{ error }}</p>
       <button @click="retry">重试</button>
     </div>
-    <ApiReference v-else :configuration="config" />
+    <ApiReference v-else-if="config" :configuration="config" />
   </div>
 </template>
 
@@ -15,31 +15,10 @@ import { ApiReference } from '@scalar/api-reference';
 import '@scalar/api-reference/style.css';
 import { getApiDocs } from '@/lib/api';
 
-// ---------- 加载状态 ----------
 const loading = ref(true);
 const error = ref<string | null>(null);
+const config = ref<any>(null);
 
-// ---------- Scalar 配置 ----------
-// 使用 as const 固定所有字面量类型
-const baseConfig = {
-  theme: 'purple' as const,
-  darkMode: true,
-  layout: 'modern' as const,
-  authentication: {
-    preferredSecurityScheme: 'BearerAuth' as const,
-    http: {
-      bearer: {
-        token: localStorage.getItem('nov_api_key') || '',
-      },
-    },
-  },
-  spec: { content: {} },
-};
-
-// 用 ref 存储配置，类型自动推导为字面量
-const config = ref(baseConfig);
-
-// ---------- 加载规范 ----------
 async function loadDocs() {
   try {
     loading.value = true;
@@ -47,9 +26,22 @@ async function loadDocs() {
 
     const specData = await getApiDocs();
 
-    // 更新配置：保留其他配置，只替换 spec
+    if (specData.servers?.[0]?.variables?.SITE_URL) {
+      specData.servers[0].variables.SITE_URL.default = window.location.origin
+    }
+
     config.value = {
-      ...baseConfig,        // 复用基础配置
+      theme: 'purple' as const,
+      darkMode: true,
+      layout: 'modern' as const,
+      authentication: {
+        preferredSecurityScheme: 'BearerAuth' as const,
+        http: {
+          bearer: {
+            token: localStorage.getItem('nov_api_key') || '',
+          },
+        },
+      },
       spec: { content: specData },
     };
   } catch (err: any) {
@@ -59,12 +51,10 @@ async function loadDocs() {
   }
 }
 
-// ---------- 重试 ----------
 function retry() {
   loadDocs();
 }
 
-// ---------- 生命周期 ----------
 onMounted(() => {
   loadDocs();
 });

@@ -195,7 +195,7 @@ export class Router {
       }
 
       if (meta.auth !== false) {
-        operation.security = [{ ApiKeyAuth: [] }]
+        operation.security = [{ BearerAuth: [] }]
       } else {
         operation.security = []
       }
@@ -251,16 +251,15 @@ export class Router {
       openapi: '3.0.3',
       info: { title: this.info.title, version: this.info.version },
       servers: [
-        { url: 'https://{worker}.workers.dev', description: 'Cloudflare Workers', variables: { worker: { default: 'legado-shelf' } } },
+        { url: '{SITE_URL}', description: '站点地址', variables: { SITE_URL: { default: '' } } },
       ],
-      security: [{ ApiKeyAuth: [] }],
+      security: [{ BearerAuth: [] }],
       components: {
         securitySchemes: {
-          ApiKeyAuth: {
-            type: 'apiKey',
-            in: 'header',
-            name: 'authorization',
-            description: 'Bearer {API_KEY}',
+          BearerAuth: {
+            type: 'http',
+            scheme: 'bearer',
+            description: '输入你的 API Key',
           },
         },
         schemas: {
