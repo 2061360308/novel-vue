@@ -2,7 +2,7 @@ import { Buffer } from 'node:buffer'
 import JSZip from 'jszip'
 
 import { createR2Client, r2Key, keyInfo, listObjects, downloadObject, deleteObject } from '../../shared/r2'
-import { createOctokit, releaseExists, createRelease, readFile, writeFile, uploadAssets } from '../../shared/github'
+import { createOctokit, releaseExists, createRelease, readFile, writeFile, uploadAssets, deleteReleaseByTag } from '../../shared/github'
 import { UPLOAD_PREFIX } from '../../shared/constants'
 
 /* ── 环境变量 ───────────────────────────────── */
@@ -84,10 +84,12 @@ async function processZip(key) {
   if (partIndices.length === 0) partIndices.push(0)
 
   let firstTag = tag0
+  const createdTags = []
 
   for (const p of partIndices) {
     const tag = `v${hash}${p}`
     if (p === 0) firstTag = tag
+    createdTags.push(tag)
 
     const body = [
       `**${bookTitle}**`,
@@ -130,6 +132,7 @@ async function processZip(key) {
   return {
     hash, title: bookTitle, author, chapters: totalChapters,
     parts: partIndices.length, createdAt: meta.d, tag: firstTag,
+    tags: createdTags,
   }
 }
 
@@ -147,8 +150,7 @@ async function main() {
     try {
       const r = await processZip(key)
       if (r) { results.push(r); ok++ }
-      else { skip++ }
-      await deleteObject(r2, hostname, R2_BUCKET, key)
+      else { skip++; await deleteObject(r2, hostname, R2_BUCKET, key) }
     } catch (e) {
       console.error(`  ❌ ${key}:`, e.message)
       fail++
@@ -159,13 +161,28 @@ async function main() {
 
   if (results.length > 0) {
     console.log('\n📚 更新索引...')
-    const { books, sha } = await readIndex()
-    const map = new Map(books.map(b => [b.h, b]))
-    for (const r of results) {
-      map.set(r.hash, { h: r.hash, t: r.title, a: r.author, c: r.chapters, p: r.parts, d: r.createdAt, tag: r.tag })
+    try {
+      const { books, sha } = await readIndex()
+      const map = new Map(books.map(b => [b.h, b]))
+      for (const r of results) {
+        map.set(r.hash, { h: r.hash, t: r.title, a: r.author, c: r.chapters, p: r.parts, d: r.createdAt, tag: r.tag })
+      }
+      await saveIndex([...map.values()], sha)
+      console.log('  ✅ index.json 已更新')
+      for (const r of results) {
+        await deleteObject(r2, hostname, R2_BUCKET, r2Key(r.hash, r.title))
+      }
+    } catch (e) {
+      console.error('\n❌ 索引更新失败，回滚已创建的 Release...')
+      console.error(`  ${e.message}`)
+      for (const r of results) {
+        for (const tag of r.tags) {
+          console.log(`  🗑 删除 ${tag}`)
+          await deleteReleaseByTag(octo, GH_OWNER, GH_NAME, tag)
+        }
+      }
+      throw e
     }
-    await saveIndex([...map.values()], sha)
-    console.log('  ✅ index.json 已更新')
   }
 }
 

@@ -49,6 +49,21 @@ export async function createRelease(
   return data
 }
 
+/** 删除 Release 及其 tag */
+export async function deleteReleaseByTag(
+  octo: Octokit, owner: string, repo: string, tag: string,
+): Promise<boolean> {
+  try {
+    const { data } = await octo.rest.repos.getReleaseByTag({ owner, repo, tag })
+    await octo.rest.repos.deleteRelease({ owner, repo, release_id: data.id })
+    await octo.rest.git.deleteRef({ owner, repo, ref: `tags/${tag}` })
+    return true
+  } catch (e: any) {
+    if (e.status !== 404) console.warn(`  ⚠ deleteRelease ${tag}: ${e.message}`)
+    return false
+  }
+}
+
 /** 读取仓库文件 */
 export async function readFile(
   octo: Octokit, owner: string, repo: string, path: string,
@@ -67,7 +82,8 @@ export async function writeFile(
   octo: Octokit, owner: string, repo: string,
   path: string, content: string, message: string, sha?: string,
 ): Promise<void> {
-  const b64 = btoa(content)
+  const bytes = new TextEncoder().encode(content)
+  const b64 = btoa(String.fromCharCode(...bytes))
   const params: any = { owner, repo, path, message, content: b64 }
   if (sha) params.sha = sha
   await octo.rest.repos.createOrUpdateFileContents(params)
