@@ -31,10 +31,9 @@ const BookDetailSchema = {
     a: { type: 'string', description: '作者', example: '刘慈欣' },
     desc: { type: 'string', description: '简介', example: '这是一部科幻巨作...' },
     c: { type: 'integer', description: '总章节数', example: 100 },
-    p: { type: 'integer', description: 'Release 分片数', example: 3 },
+    p: { type: 'integer', description: '分片数', example: 3 },
     d: { type: 'string', format: 'date-time', description: '创建时间', example: '2026-07-14T17:55:22Z' },
-    i: { type: 'integer', description: '是否有封面（0/1）', example: 1 },
-    tag: { type: 'string', description: '首 Release tag', example: 'va1b2c3d4e5f60' },
+    i: { type: 'integer', description: '有无封面（0/1）', example: 1 },
     releaseUrl: { type: 'string', description: 'Release 页面 URL', example: 'https://github.com/user/content/releases/tag/va1b2c3d4e5f60' },
   },
 }
@@ -139,7 +138,6 @@ export function register(router: Router) {
       p: detail.p,
       d: detail.d,
       i: detail.i ?? 0,
-      tag,
       releaseUrl: `https://github.com/${CONTENT_OWNER}/${CONTENT_REPO}/releases/tag/${tag}`,
     })
   }, {
@@ -230,21 +228,21 @@ export function register(router: Router) {
     },
   })
 
-  // ── 详情（简介+目录） ──
+  // ── 完整元数据 ──
 
   router.get('/api/books/:hash/detail', async (req, env, ctx, params) => {
     const hash = params.hash
     if (!HASH_REGEX.test(hash)) return err('INVALID_REQUEST', null, 400)
     const detail = await fetchDetail(env, hash)
     if (!detail) return err('NOT_FOUND', null, 404)
-    return cachedJsonResponse({ desc: detail.desc || '', toc: detail.toc || [] }, req, ctx)
+    return cachedJsonResponse(detail, req, ctx)
   }, {
-    summary: '获取书籍简介及目录',
-    description: '返回书籍简介和完整目录，缓存 24 小时。',
+    summary: '获取书籍完整元数据',
+    description: '返回 detail.json 的原始内容（书名、作者、简介、章节数、分片数、创建时间、封面标识、完整目录），缓存 24 小时。',
     tags: ['Books'],
     params: HASH_PARAM,
     responses: {
-      '200': { description: '简介与目录', content: { schema: { type: 'object', properties: { desc: { type: 'string' }, toc: { type: 'array' } } } } },
+      '200': { description: '书籍全部元数据', content: { schema: { type: 'object' } } },
       '404': { description: '[NOT_FOUND] 未找到' },
     },
   })
